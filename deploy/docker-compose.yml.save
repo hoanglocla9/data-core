@@ -1,0 +1,187 @@
+version: "3.5"
+
+services:
+  namenode:
+    image: hpccbk/hadoop-docker-namenode:3.2.1
+    hostname: namenode
+    container_name: namenode
+    networks:
+      - hadoop
+    volumes:
+      - namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=hpccbk
+    ports:
+      - 9870:9870
+      - 9001:9000
+    env_file:
+      - ./hadoop.env
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 9870
+
+  datanode:
+    image: hpccbk/hadoop-docker-datanode:3.2.1
+    hostname: datanode
+    container_name: datanode
+    networks:
+      - hadoop
+    volumes:
+      - datanode:/hadoop/dfs/data
+    env_file:
+      - ./hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 namenode:9000"
+    ports:
+      - 9864:9864
+    depends_on:
+      - namenode
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.hostname != headnode.supernodexp.hpc
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 9864
+
+  resourcemanager:
+    image: hpccbk/hadoop-docker-resourcemanager:3.2.1
+    hostname: resourcemanager
+    container_name: resourcemanager
+    networks:
+      - hadoop
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+    env_file:
+      - ./hadoop.env
+    ports:
+      - 8088:8088
+    depends_on:
+      - namenode
+      - datanode
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 8088
+    healthcheck:
+      disable: true
+
+  nodemanager:
+    image: hpccbk/hadoop-docker-nodemanager:3.2.1
+    hostname: nodemanager
+    container_name: nodemanager
+    networks:
+      - hadoop
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    ports:
+      - 8042:8042
+
+    depends_on:
+      - namenode
+      - datanode
+      - resourcemanager
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.hostname != headnode.supernodexp.hpc
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 8042
+
+ # historyserver:
+  #   image: hpccbk/hadoop-docker-historyserver:3.2.1
+   
+   #  networks:
+    #   - hadoop
+   
+    # volumes:
+     #  - historyserver:/hadoop/yarn/timeline
+     #environment:
+     #  SERVICE_PRECONDITION: "namenode:50070 datanode:50075 resourcemanager:8088"
+     #env_file:
+     #  - ./hadoop.env
+     #ports:
+     #   - 8188:8188
+    # deploy:
+     #  mode: replicated
+      # replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.role == manager
+      # labels:
+      #   traffic.docker.network: hadoop
+      #   traffic.port: 8188
+
+  notebook:
+    image: hpccbk/hadoop-docker-notebook:3.2.1
+    networks:
+      - hadoop
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - ./zeppelin/conf:/zeppelin/conf
+      - /data:/data
+      - /notebooks:/zeppelin/notebook
+    ports:
+      - 8001:8080
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == pc77 
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 8001
+  #mongodb:
+   # image: hpccbk/hadoop-docker-mongodb:3.2.1
+    #networks:
+     # - hadoop
+    #ports:
+    #  - 27888:27017
+    #deploy:
+     # mode: replicated
+     # replicas: 1
+     # restart_policy:                                                                                                                                                                                                                                
+      #  condition: on-failure
+      #labels:
+      #  traffic.docker.network: hadoop
+       # traffic.port: 27888
+
+volumes:
+  datanode:
+  namenode:
+  historyserver:
+
+networks:
+  hadoop:
+    driver: overlay
+    external:
+      name: kafka_kafka
+    # Option for user to submit their jobs outside the cluster
+    attachable: true

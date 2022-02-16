@@ -1,0 +1,4 @@
+ALTER USER 'root'@'localhost' IDENTIFIED BY '123';
+CREATE USER 'mlflow_user'@'localhost' IDENTIFIED BY 'mlflow_password';
+GRANT ALL PRIVILEGES ON *.* To 'mlflow_user'@'localhost';
+FLUSH PRIVILEGES;

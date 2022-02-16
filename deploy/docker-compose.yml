@@ -1,0 +1,229 @@
+version: "3.5"
+
+services:
+  namenode:
+    image: hpccbk/hadoop-docker-namenode:3.2.1
+    networks:
+      - hadoop
+    volumes:
+      - namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=hpccbk
+    ports:
+      - 9870:9870
+      - 9001:9000
+    env_file:
+      - ./hadoop.env
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 9870
+
+  datanode:
+    image: hpccbk/hadoop-docker-datanode:3.2.1
+    networks:
+      - hadoop
+    volumes:
+      - datanode:/hadoop/dfs/data
+    env_file:
+      - ./hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 namenode:9000"
+    ports:
+      - 9864:9864
+    depends_on:
+      - namenode
+    deploy:
+      mode: replicated
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.hostname != headnode.supernodexp.hpc
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 9864
+
+  resourcemanager:
+    image: hpccbk/hadoop-docker-resourcemanager:3.2.1
+    networks:
+      - hadoop
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+    env_file:
+      - ./hadoop.env
+    ports:
+      - 8088:8088
+    depends_on:
+      - namenode
+      - datanode
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 8088
+    healthcheck:
+      disable: true
+
+  nodemanager:
+    image: hpccbk/hadoop-docker-nodemanager:3.2.1
+    networks:
+      - hadoop
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    ports:
+      - 8042:8042
+
+    depends_on:
+      - namenode
+      - datanode
+      - resourcemanager
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.hostname != headnode.supernodexp.hpc
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 8042
+  db:
+    image: hpccbk/mysql-server:3.2.1
+    volumes:
+      - ./dbdata:/var/lib/mysql
+    networks:
+      - hadoop
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 3306
+
+  mlflow:
+    image: hpccbk/mlflow-base:3.2.1
+    ports:
+      - 5000:5000
+    depends_on:
+      - db
+    networks:
+      - hadoop
+    entrypoint: bash ./wait-for-it.sh db:3306 -t 90 -- mlflow server --backend-store-uri mysql+pymysql://mlflow_user@db:3306/mlflow_database --default-artifact-root hdfs://namenode:9000 -h 0.0.0.0 -p 5000
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 5000
+  
+  knox:
+    image: farberg/apache-knox-docker:latest
+    networks:
+      - hadoop
+    depends_on:
+      - db
+    deploy:                                                                                                                                                                                                                                        
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        traffic.docker.network: hadoop
+        
+  historyserver:
+    image: hpccbk/hadoop-docker-historyserver:3.2.1
+    networks:
+      - hadoop
+   
+    volumes:
+      - historyserver:/hadoop/yarn/timeline
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    ports:
+      - 8189:8188
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 8188
+
+  notebook:
+    image: hpccbk/hadoop-docker-notebook:3.2.1
+    networks:
+      - hadoop
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - ./zeppelin/conf:/zeppelin/conf
+      - /data:/data
+      - /notebooks:/zeppelin/notebook
+    ports:
+      - 8001:8080
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == headnode.supernodexp.hpc 
+      labels:
+        traffic.docker.network: hadoop
+        traffic.port: 8001
+  #mongodb:
+   # image: hpccbk/hadoop-docker-mongodb:3.2.1
+    #networks:
+     # - hadoop
+    #ports:
+    #  - 27888:27017
+    #deploy:
+     # mode: replicated
+     # replicas: 1
+     # restart_policy:                                                                                                                                                                                                                                
+      #  condition: on-failure
+      #labels:
+      #  traffic.docker.network: hadoop
+       # traffic.port: 27888
+
+volumes:
+  datanode:
+  namenode:
+  historyserver:
+
+networks:
+  hadoop:
+    driver: overlay
+    external:
+      name: confluent #kafka_kafka
+    # Option for user to submit their jobs outside the cluster
+    attachable: true

@@ -11,3 +11,10 @@ run-sparkpi:
 
 run-heda-preprocessing:
 	docker-compose run app /data/test-preprocessing-data.sh
+
+run-shell:
+	docker-compose run app /bin/bash
+
+run-consumer:
+	docker-compose run -d app spark-submit --master yarn --packages org.apache.spark:spark-avro_2.12:3.2.0,org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.0 data/Thesis/kafka_adafruit/consumer_no_schema.py
+

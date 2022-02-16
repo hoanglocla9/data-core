@@ -102,7 +102,7 @@ services:
     env_file:
       - ./hadoop.env
     ports:
-      - 8188:8188
+      - 8189:8188
     deploy:
       mode: replicated
       replicas: 1
@@ -141,3 +141,4 @@ networks:
     driver: overlay
     # Option for user to submit their jobs outside the cluster
     attachable: true
+    name: kafka_kafka

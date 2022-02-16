@@ -19,7 +19,7 @@ tag-latest:
 	docker tag $(dockerhub_user)/hadoop-docker-resourcemanager:$(current_branch) $(dockerhub_user)/hadoop-docker-resourcemanager:latest
 	docker tag $(dockerhub_user)/hadoop-docker-nodemanager:$(current_branch) $(dockerhub_user)/hadoop-docker-nodemanager:latest
 	docker tag $(dockerhub_user)/hadoop-docker-historyserver:$(current_branch) $(dockerhub_user)/hadoop-docker-historyserver:latest
-	docker tag $(dockerhub_user)/hadoop-docker-notebook:$(current_branch) $(dockerhub_user)/hadoop-docker-notebook:latest
+	docker tag $(dockerhub_user)/hadoop-docker-notebook:$(current_branch) $(dockerhub_user)/hadoop-docker-notebook:latest       
 
 push:
 	docker push $(dockerhub_user)/hadoop-docker-base:$(current_branch) 
